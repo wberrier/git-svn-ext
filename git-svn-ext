@@ -267,7 +267,6 @@ class SvnExternal:
 
         self.dir = match_dict["dir"].lstrip().rstrip()
         self.url = match_dict["url"].lstrip().rstrip()
-        print(f"{match_dict=}")
         if match_dict["rev"] != None:
             self.rev = match_dict["rev"].lstrip().rstrip()
         # this key may not always be in the dict
