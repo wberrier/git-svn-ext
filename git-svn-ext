@@ -37,7 +37,7 @@ def getoutput(command, include_stderr=True):
     output = proc.communicate()[0]
 
     # Keep compatibility with commands.getoutput() by removing trailing newline
-    output = output.rstrip('\n')
+    output = output.rstrip(b'\n')
 
     return output
 
@@ -52,7 +52,7 @@ def list_references():
     references = getoutput('git show-ref --head')
     HEAD_ref = None
     refs = {}
-    for item in references.split('\n'):
+    for item in references.decode('utf-8').split('\n'):
         stuff = item.split()
         if len(stuff) == 2:
             (sha1, name) = stuff
@@ -70,7 +70,7 @@ def commit_objects():
     """
     commit_list = getoutput('git rev-list --all --parents')
     commits = {}
-    for item in commit_list.split('\n'):
+    for item in commit_list.decode('utf-8').split('\n'):
         splitted_item = item.split()
         if len(splitted_item) != 2:
             commit = splitted_item[0]
@@ -85,7 +85,6 @@ def find_svn_branch_name():
     """Return the reference name of the current remote branch."""
     head, references = list_references()
     commits = commit_objects()
-
     current_commit = head
     while current_commit:
         if current_commit in references:
@@ -110,7 +109,7 @@ def find_uncommitted(svn_branch):
     output = getoutput('git log --pretty="format:%%h %%s" %s..HEAD' %
                        svn_branch)
     if output:
-        results += output.split('\n')
+        results += output.decode('utf-8').split('\n')
 
     return results
 
@@ -120,7 +119,7 @@ def get_svn_info():
 
     results = {}
     found = False
-    for line in getoutput("git svn info").split("\n"):
+    for line in getoutput("git svn info").decode('utf-8').split("\n"):
         match = re.search("(.+): (.+)", line)
         if match:
             found = True
@@ -145,7 +144,7 @@ def get_git_svn_externals():
     results = {}
 
     external_dir = ""
-    for line in getoutput("git svn show-externals", include_stderr=False).split("\n"):
+    for line in getoutput("git svn show-externals", include_stderr=False).decode('utf-8').split("\n"):
 
         external_dir_match = re.search(r"# (.*)", line)
         if external_dir_match:
@@ -157,7 +156,7 @@ def get_git_svn_externals():
                     external_dir = tmp
         elif line != "":
             # start array
-            if not results.has_key(external_dir): results[external_dir] = []
+            if external_dir not in results: results[external_dir] = []
 
             # NOTE: git-svn prepends the external with external_dir,
             # undo that
@@ -170,8 +169,7 @@ def get_git_svn_externals():
 def exit_if_not_toplevel():
     """exit if not run from the top level git directory"""
     toplevel_directory = get_relative_base()
-
-    if toplevel_directory != "":
+    if toplevel_directory.decode("utf-8") != "":
         logger.error("not in toplevel directory")
         sys.exit(1)
 
@@ -203,7 +201,7 @@ def append_line_if_not_included(filename, line):
 
 def run_command(command):
     """print out and run a command"""
-    print command
+    print (command)
     return os.system(command)
 
 
@@ -269,11 +267,11 @@ class SvnExternal:
 
         self.dir = match_dict["dir"].lstrip().rstrip()
         self.url = match_dict["url"].lstrip().rstrip()
-
+        print(f"{match_dict=}")
         if match_dict["rev"] != None:
             self.rev = match_dict["rev"].lstrip().rstrip()
         # this key may not always be in the dict
-        elif match_dict.has_key("rev2") and match_dict["rev2"] != None:
+        elif "rev2" in match_dict and match_dict["rev2"] != None:
             self.rev = match_dict["rev2"].lstrip().rstrip()
 
         # Handle the several additional options available in 1.5 and beyond
@@ -319,7 +317,7 @@ class SvnExternal:
 
             # Legacy: Honor env var to override scheme
             # NOTE: projects should use the "//" notation instead
-            if os.environ.has_key("USE_SSH"):
+            if "USE_SSH" in os.environ:
                 url = re.sub(svn_access_part, "svn+ssh", url)
 
             logger.debug("Url after normalization and optional scheme change: " + url)
@@ -367,7 +365,7 @@ class GitSvnExternal:
     def GetExternals():
         ret = []
 
-        for src_dir, externals in get_git_svn_externals().items():
+        for src_dir, externals in list(get_git_svn_externals().items()):
             for ext in externals:
 
                 logger.debug("Source dir: %s, External: %s" % (src_dir, ext))
@@ -469,7 +467,7 @@ class GitSvnExternal:
         # Try to figure out what the tags and branches portions are
         tags = "tags"
         brch = "branches"
-        branchpath = branch.split("/")[0]
+        branchpath = branch.decode('utf-8').split("/")[0]
         if tags.count(branchpath): tags = branchpath
         if brch.count(branchpath): brch = branchpath
 
@@ -534,7 +532,7 @@ def clone_handler(args):
 
     for external in externals:
 
-        print "%s -> %s" % (external.local_dir, external.remote_url)
+        print("%s -> %s" % (external.local_dir, external.remote_url))
 
         external.clone()
         external.create_link()
@@ -562,7 +560,7 @@ def update_handler(args):
     for ext in externals:
         ext_path = ext.local_storage()
         if ext_paths.count(ext_path):
-            print ">>> " + ext_path
+            print(">>> " + ext_path)
             current_dir = os.getcwd()
             os.chdir(ext_path)
             run_command("git svn fetch %s" % ext.revision_arguments())
@@ -577,8 +575,8 @@ def check_unpushed_handler(args):
     """Check if local git-svn checkout has unpushed commits"""
 
     status = getoutput('git status')
-    if status.startswith('fatal'):
-        print status
+    if status.decode('utf-8').startswith('fatal'):
+        print(status)
         sys.exit(1)
     svn_branch = find_svn_branch_name()
     if svn_branch is None:
@@ -589,10 +587,10 @@ def check_unpushed_handler(args):
     commits = find_uncommitted(svn_branch)
 
     if len(commits) > 0:
-        print 'Possible unpushed commits (against %s):' % svn_branch
-        print "\n".join(commits)
+        print('Possible unpushed commits (against %s):' % svn_branch)
+        print("\n".join(commits))
     else:
-        print 'No unpushed commits found.'
+        print('No unpushed commits found.')
 
 def check_handler(args):
     """run 'git status' and 'check-unpushed' for all externals"""
@@ -606,14 +604,14 @@ def check_handler(args):
 
         status = getoutput("git status")
         unpushed = getoutput(git_svn_ext_fullpath + " check-unpushed")
-        if not re.search("clean", status) or not re.search("No unpushed", unpushed):
-            print ">>>>>>>>>>>>>>>> %s <<<<<<<<<<<<<<<<" % dir
+        if not re.search("clean", status.decode('utf-8')) or not re.search("No unpushed", unpushed.decode('utf-8')):
+            print(">>>>>>>>>>>>>>>> %s <<<<<<<<<<<<<<<<" % dir)
             # Run these again to get color output
             os.system("git status")
             os.system(git_svn_ext_fullpath + " check-unpushed")
-            print "----------------------------------------"
+            print("----------------------------------------")
         else:
-            print dir + " is clean"
+            print(dir + " is clean")
 
         os.chdir(current_dir)
 
@@ -629,7 +627,7 @@ def for_all_handler(args):
             current_dir = os.getcwd()
             os.chdir(dir)
 
-            print ">>> %s: %s" % (dir, command)
+            print(">>> %s: %s" % (dir, command))
 
             os.system(command)
 
@@ -652,7 +650,7 @@ class Handlers:
         self.handlers[name] = handler
 
     def get(self, name):
-        if self.handlers.has_key(name):
+        if name in self.handlers:
             return self.handlers[name]
         else:
             return None
@@ -689,14 +687,14 @@ handlers.add('for-all',        for_all_handler)
 
 def usage():
     """Descriptive text of all options"""
-    print ""
-    print "Usage: " + sys.argv[0] + " <sub command> [sub command args]"
-    print ""
-    print "  sub commmands:"
-    print handlers.helptext()
-    print "  Notes:"
-    print "    externals may be ignored if listed in " + GitSvnExternal.ExcludesFile
-    print ""
+    print("")
+    print("Usage: " + sys.argv[0] + " <sub command> [sub command args]")
+    print("")
+    print("  sub commmands:")
+    print(handlers.helptext())
+    print("  Notes:")
+    print("    externals may be ignored if listed in " + GitSvnExternal.ExcludesFile)
+    print("")
 
 if __name__ == '__main__':
 
